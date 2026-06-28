@@ -27,6 +27,78 @@ Write-Host "Meshtastic Firmware Sync Script" -ForegroundColor $Colors.Info
 Write-Host "========================================" -ForegroundColor $Colors.Info
 Write-Host ""
 
+
+# Проверяем, нет ли незавершённого слияния или rebase
+$IsMergeInProgress = Test-Path .git/MERGE_HEAD
+$IsRebaseInProgress = (Test-Path .git/rebase-merge) -or (Test-Path .git/rebase-apply)
+
+if ($IsMergeInProgress -or $IsRebaseInProgress) {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor $Colors.Error
+    Write-Host "ОБНАРУЖЕНО НЕЗАВЕРШЁННОЕ СЛИЯНИЕ!" -ForegroundColor $Colors.Error
+    Write-Host "========================================" -ForegroundColor $Colors.Error
+    Write-Host ""
+    Write-Host "Git находится в состоянии незавершённого слияния или rebase." -ForegroundColor $Colors.Warning
+    Write-Host "Скрипт не может работать в этом состоянии." -ForegroundColor $Colors.Warning
+    Write-Host ""
+    Write-Host "Выберите действие:" -ForegroundColor $Colors.Question
+    Write-Host "  [A] - Отменить слияние (git merge --abort) — РЕКОМЕНДУЕТСЯ" -ForegroundColor $Colors.Success
+    Write-Host "  [C] - Завершить слияние, оставив ваши версии файлов" -ForegroundColor $Colors.Warning
+    Write-Host "  [X] - Выйти без действий" -ForegroundColor $Colors.Error
+    Write-Host ""
+    
+    $Choice = Read-Host "Ваш выбор (A/C/X) [по умолчанию: A]"
+    
+    if ([string]::IsNullOrWhiteSpace($Choice)) {
+        $Choice = 'A'
+    } else {
+        $Choice = $Choice.ToUpper()
+    }
+    
+    switch ($Choice) {
+        'A' {
+            Write-Host "Отмена слияния..." -ForegroundColor $Colors.Info
+            if ($IsMergeInProgress) {
+                git merge --abort
+            } else {
+                git rebase --abort
+            }
+            Write-Host "? Слияние отменено. Можно продолжить работу." -ForegroundColor $Colors.Success
+        }
+        'C' {
+            Write-Host "Завершение слияния с приоритетом ваших файлов..." -ForegroundColor $Colors.Info
+            $ConflictFiles = git diff --name-only --diff-filter=U
+            foreach ($File in ($ConflictFiles -split "`n")) {
+                if (-not [string]::IsNullOrWhiteSpace($File)) {
+                    git checkout --ours $File
+                    git add $File
+                }
+            }
+            if ($IsMergeInProgress) {
+                git commit --no-edit
+            } else {
+                git rebase --continue
+            }
+            Write-Host "? Слияние завершено." -ForegroundColor $Colors.Success
+        }
+        'X' {
+            Write-Host "Выход из скрипта." -ForegroundColor $Colors.Warning
+            exit 0
+        }
+        default {
+            Write-Host "Неверный выбор. Отмена слияния..." -ForegroundColor $Colors.Warning
+            if ($IsMergeInProgress) {
+                git merge --abort
+            } else {
+                git rebase --abort
+            }
+        }
+    }
+    
+    Write-Host ""
+}
+
+
 # Проверяем, находимся ли мы в Git-репозитории
 if (-not (Test-Path .git)) {
     Write-Error "Текущая папка не является Git-репозиторием!"
