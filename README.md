@@ -95,6 +95,220 @@ git remote add upstream https://github.com/meshtastic/firmware.git
 
 > 💡 **Совет:** просто нажимайте `Enter` — это эквивалентно выбору `N` и сохранит вашу версию файла.
 
+
+### 📝 Фиксация изменений в репозитории
+
+Если вы вручную изменили файлы в папке проекта (через VS Code, проводник Windows или другой редактор) и хотите сохранить эти изменения в вашем репозитории на GitHub, выполните следующие шаги.
+
+#### Шаг 1: Проверьте, какие файлы были изменены
+
+```powershell
+git status
+```
+
+Вы увидите список изменённых файлов:
+```
+On branch develop
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+        modified:   src/main.cpp
+        modified:   variants/my_board/variant.h
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+        src/modules/NewModule.cpp
+```
+
+**Обозначения:**
+- `modified:` — файл был изменён
+- `Untracked files:` — новый файл, который Git ещё не отслеживает
+
+#### Шаг 2: Посмотрите, что именно изменилось (опционально)
+
+```powershell
+# Посмотреть изменения в конкретном файле
+git diff src/main.cpp
+
+# Посмотреть изменения во всех файлах
+git diff
+
+# Посмотреть изменения в новом файле (если он уже добавлен в индекс)
+git diff --cached
+```
+
+#### Шаг 3: Добавьте изменения в индекс (staging)
+
+Выберите один из вариантов:
+
+```powershell
+# Вариант А: Добавить конкретный файл
+git add src/main.cpp
+
+# Вариант Б: Добавить несколько конкретных файлов
+git add src/main.cpp variants/my_board/variant.h
+
+# Вариант В: Добавить все изменённые и новые файлы
+git add .
+
+# Вариант Г: Добавить все изменённые файлы, но НЕ новые (untracked)
+git add -u
+```
+
+#### Шаг 4: Создайте коммит
+
+```powershell
+# Простой коммит с сообщением
+git commit -m "feat: add new module for temperature monitoring"
+
+# Коммит с подробным описанием (откроется редактор)
+git commit
+```
+
+**Рекомендуемый формат сообщений коммитов:**
+- `feat:` — новая функция
+- `fix:` — исправление ошибки
+- `docs:` — изменение документации
+- `style:` — форматирование, без изменения логики
+- `refactor:` — рефакторинг кода
+- `test:` — добавление тестов
+- `chore:` — обновление зависимостей, конфигурации
+
+Примеры:
+```powershell
+git commit -m "feat: add support for ESP32-S3 custom board"
+git commit -m "fix: correct I2C address for sensor"
+git commit -m "docs: update README with new module description"
+```
+
+#### Шаг 5: Отправьте изменения в ваш репозиторий на GitHub
+
+```powershell
+# Отправить текущую ветку в origin
+git push origin develop
+```
+
+Если вы работали в feature-ветке:
+```powershell
+git push origin feature/my-new-module
+```
+
+#### Шаг 6: Проверьте результат
+
+```powershell
+# Убедитесь, что всё синхронизировано
+git status
+
+# Должно быть:
+# On branch develop
+# Your branch is up to date with 'origin/develop'.
+# nothing to commit, working tree clean
+```
+
+### 📋 Полный пример: от изменения файла до push
+
+```powershell
+# 1. Вы изменили файл src/main.cpp в VS Code
+
+# 2. Проверили статус
+git status
+
+# 3. Посмотрели изменения
+git diff src/main.cpp
+
+# 4. Добавили файл в индекс
+git add src/main.cpp
+
+# 5. Создали коммит
+git commit -m "feat: add custom initialization for new sensor"
+
+# 6. Отправили на GitHub
+git push origin develop
+
+# 7. Проверили результат
+git status
+```
+
+### 📋 Пример с несколькими файлами и новым модулем
+
+```powershell
+# Вы создали новый модуль и изменили конфигурацию
+
+# 1. Проверили статус
+git status
+# Видим:
+#   modified:   platformio.ini
+#   modified:   src/main.cpp
+#   Untracked files:
+#     src/modules/TemperatureModule.cpp
+#     src/modules/TemperatureModule.h
+
+# 2. Добавили все изменения
+git add .
+
+# 3. Создали коммит
+git commit -m "feat: add temperature monitoring module"
+
+# 4. Отправили на GitHub
+git push origin develop
+```
+
+### 🔄 Если нужно отменить изменения
+
+#### Отменить изменения в конкретном файле (вернуть к последнему коммиту):
+```powershell
+git restore src/main.cpp
+```
+
+#### Отменить все изменения в рабочей директории (ОПАСНО!):
+```powershell
+git restore .
+```
+
+#### Отменить последний коммит (сохранить изменения в файлах):
+```powershell
+git reset --soft HEAD~1
+```
+
+#### Отменить последний коммит (удалить изменения):
+```powershell
+git reset --hard HEAD~1
+```
+
+### 💡 Рекомендации
+
+1. **Коммитьте часто.** Делайте небольшие логические коммиты — каждый коммит должен решать одну конкретную задачу.
+
+2. **Пишите понятные сообщения.** Сообщение коммита должно объяснять, **что** было изменено и **почему**.
+
+3. **Не коммитьте временные файлы.** Добавьте в `.gitignore` всё, что не должно попадать в репозиторий:
+   ```
+   # Пример .gitignore
+   *.log
+   .vscode/
+   .pio/
+   build/
+   ```
+
+4. **Перед push проверяйте сборку.** Убедитесь, что проект собирается без ошибок:
+   ```powershell
+   pio run -e <ваша_плата>
+   ```
+
+5. **Используйте feature-ветки для больших изменений.** Если вы работаете над крупной функцией, создайте отдельную ветку:
+   ```powershell
+   git checkout -b feature/temperature-module
+   # Работаете, коммитите
+   git push origin feature/temperature-module
+   ```
+
+6. **Синхронизируйтесь перед началом работы.** Если вы работали на другом устройстве или кто-то ещё имеет доступ к репозиторию:
+   ```powershell
+   git pull --rebase origin develop
+   ```
+
+
+
 ### 📌 Рекомендации по рабочему процессу
 
 1. **Периодичность синхронизации.** Запускайте скрипт раз в 1–2 недели, чтобы не накапливать большой объём изменений для слияния. Чем меньше изменений — тем проще разрешать конфликты.
