@@ -1,8 +1,10 @@
 # Sync-With-Upstream.ps1
+# ============================================================================
 # Скрипт для синхронизации вашего форка с оригинальным репозиторием meshtastic/firmware
 # Источник обновлений: ветка "develop" из upstream (или указанная через параметр)
 # Приоритет: ваши изменения > изменения из upstream
 # При конфликтах: интерактивное решение с приоритетом ваших файлов
+# ============================================================================
 
 param(
     [Parameter(Mandatory=$false)]
@@ -27,13 +29,21 @@ Write-Host "Meshtastic Firmware Sync Script" -ForegroundColor $Colors.Info
 Write-Host "========================================" -ForegroundColor $Colors.Info
 Write-Host ""
 
+# ============================================================================
+# ПРОВЕРКА 1: Находимся ли мы в Git-репозитории
+# ============================================================================
+if (-not (Test-Path .git)) {
+    Write-Error "Текущая папка не является Git-репозиторием!"
+    exit 1
+}
 
-# Проверяем, нет ли незавершённого слияния или rebase
+# ============================================================================
+# ПРОВЕРКА 2: Нет ли незавершённого слияния или rebase
+# ============================================================================
 $IsMergeInProgress = Test-Path .git/MERGE_HEAD
 $IsRebaseInProgress = (Test-Path .git/rebase-merge) -or (Test-Path .git/rebase-apply)
 
 if ($IsMergeInProgress -or $IsRebaseInProgress) {
-    Write-Host ""
     Write-Host "========================================" -ForegroundColor $Colors.Error
     Write-Host "ОБНАРУЖЕНО НЕЗАВЕРШЁННОЕ СЛИЯНИЕ!" -ForegroundColor $Colors.Error
     Write-Host "========================================" -ForegroundColor $Colors.Error
@@ -46,15 +56,15 @@ if ($IsMergeInProgress -or $IsRebaseInProgress) {
     Write-Host "  [C] - Завершить слияние, оставив ваши версии файлов" -ForegroundColor $Colors.Warning
     Write-Host "  [X] - Выйти без действий" -ForegroundColor $Colors.Error
     Write-Host ""
-    
+
     $Choice = Read-Host "Ваш выбор (A/C/X) [по умолчанию: A]"
-    
+
     if ([string]::IsNullOrWhiteSpace($Choice)) {
         $Choice = 'A'
     } else {
         $Choice = $Choice.ToUpper()
     }
-    
+
     switch ($Choice) {
         'A' {
             Write-Host "Отмена слияния..." -ForegroundColor $Colors.Info
@@ -63,7 +73,7 @@ if ($IsMergeInProgress -or $IsRebaseInProgress) {
             } else {
                 git rebase --abort
             }
-            Write-Host "? Слияние отменено. Можно продолжить работу." -ForegroundColor $Colors.Success
+            Write-Host "? Слияние отменено. Продолжаем работу." -ForegroundColor $Colors.Success
         }
         'C' {
             Write-Host "Завершение слияния с приоритетом ваших файлов..." -ForegroundColor $Colors.Info
@@ -72,6 +82,7 @@ if ($IsMergeInProgress -or $IsRebaseInProgress) {
                 if (-not [string]::IsNullOrWhiteSpace($File)) {
                     git checkout --ours $File
                     git add $File
+                    Write-Host "  ? Оставлена ваша версия: $File" -ForegroundColor $Colors.Success
                 }
             }
             if ($IsMergeInProgress) {
@@ -80,6 +91,9 @@ if ($IsMergeInProgress -or $IsRebaseInProgress) {
                 git rebase --continue
             }
             Write-Host "? Слияние завершено." -ForegroundColor $Colors.Success
+            Write-Host ""
+            Write-Host "Слияние завершено. Запустите скрипт заново для синхронизации." -ForegroundColor $Colors.Info
+            exit 0
         }
         'X' {
             Write-Host "Выход из скрипта." -ForegroundColor $Colors.Warning
@@ -94,23 +108,20 @@ if ($IsMergeInProgress -or $IsRebaseInProgress) {
             }
         }
     }
-    
+
     Write-Host ""
 }
 
-
-# Проверяем, находимся ли мы в Git-репозитории
-if (-not (Test-Path .git)) {
-    Write-Error "Текущая папка не является Git-репозиторием!"
-    exit 1
-}
-
-# Получаем текущую локальную ветку
+# ============================================================================
+# ПОЛУЧЕНИЕ ТЕКУЩЕЙ ВЕТКИ
+# ============================================================================
 $CurrentBranch = git rev-parse --abbrev-ref HEAD
 Write-Host "Локальная ветка: $CurrentBranch" -ForegroundColor $Colors.Info
 Write-Host "Целевая ветка upstream: $UpstreamBranch" -ForegroundColor $Colors.Info
 
-# Проверяем наличие upstream remote
+# ============================================================================
+# ПРОВЕРКА 3: Наличие upstream remote
+# ============================================================================
 $Remotes = git remote -v
 if (-not ($Remotes -match "upstream")) {
     Write-Error "Remote 'upstream' не найден! Добавьте его командой:"
@@ -118,7 +129,9 @@ if (-not ($Remotes -match "upstream")) {
     exit 1
 }
 
-# Сохраняем несохраненные изменения в stash
+# ============================================================================
+# СОХРАНЕНИЕ НЕСОХРАНЁННЫХ ИЗМЕНЕНИЙ В STASH
+# ============================================================================
 $Status = git status --porcelain
 $StashCreated = $false
 
@@ -136,7 +149,9 @@ if ($Status) {
     Write-Host "? Изменения сохранены в stash" -ForegroundColor $Colors.Success
 }
 
-# Получаем последние изменения из upstream
+# ============================================================================
+# ПОЛУЧЕНИЕ ИЗМЕНЕНИЙ ИЗ UPSTREAM
+# ============================================================================
 Write-Host ""
 Write-Host "Получение изменений из upstream..." -ForegroundColor $Colors.Info
 git fetch upstream
@@ -147,7 +162,9 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-# Проверяем, существует ли указанная ветка в upstream
+# ============================================================================
+# ПРОВЕРКА 4: Существует ли указанная ветка в upstream
+# ============================================================================
 $UpstreamRefExists = git branch -r | Select-String "upstream/$UpstreamBranch"
 if (-not $UpstreamRefExists) {
     Write-Error "Ветка 'upstream/$UpstreamBranch' не найдена в upstream!"
@@ -157,7 +174,9 @@ if (-not $UpstreamRefExists) {
     exit 1
 }
 
-# Проверяем, есть ли новые коммиты для слияния
+# ============================================================================
+# ПРОВЕРКА 5: Есть ли новые коммиты для слияния
+# ============================================================================
 $CommitsBehind = git rev-list --left-right --count HEAD...upstream/$UpstreamBranch
 $BehindCount = ($CommitsBehind -split '\s+')[1]
 
@@ -176,7 +195,9 @@ if ($BehindCount -eq '0') {
 
 Write-Host "Найдено $BehindCount новых коммитов в upstream/$UpstreamBranch для слияния." -ForegroundColor $Colors.Info
 
-# Выполняем слияние
+# ============================================================================
+# ВЫПОЛНЕНИЕ СЛИЯНИЯ ИЛИ ПЕРЕБАЗИРОВАНИЯ
+# ============================================================================
 Write-Host ""
 Write-Host "Выполнение $Strategy с upstream/$UpstreamBranch..." -ForegroundColor $Colors.Info
 
@@ -187,7 +208,9 @@ if ($Strategy -eq 'Merge') {
     git rebase upstream/$UpstreamBranch
 }
 
-# Проверяем наличие конфликтов
+# ============================================================================
+# ПРОВЕРКА НАЛИЧИЯ КОНФЛИКТОВ
+# ============================================================================
 $Conflicts = git diff --name-only --diff-filter=U
 
 if ($Conflicts) {
@@ -198,26 +221,38 @@ if ($Conflicts) {
     Write-Host ""
     Write-Host "Следующие файлы имеют конфликты:" -ForegroundColor $Colors.Warning
 
-    $ConflictFiles = @($Conflicts -split "`n")
-    for ($i = 0; $i -lt $ConflictFiles.Count; $i++) {
+    $ConflictFiles = @($Conflicts -split "`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $TotalConflicts = $ConflictFiles.Count
+    
+    for ($i = 0; $i -lt $TotalConflicts; $i++) {
         Write-Host "  $($i + 1). $($ConflictFiles[$i])" -ForegroundColor $Colors.Warning
     }
 
     Write-Host ""
-    Write-Host "Для каждого файла выберите действие:" -ForegroundColor $Colors.Question
-    Write-Host "  [N] - Оставить ВАШУ версию (по умолчанию, рекомендуется)" -ForegroundColor $Colors.Success
-    Write-Host "  [Y] - Заменить на версию из UPSTREAM" -ForegroundColor $Colors.Warning
-    Write-Host "  [V] - Открыть файл в VS Code для ручного разрешения" -ForegroundColor $Colors.Info
-    Write-Host "  [A] - Прервать слияние и выйти" -ForegroundColor $Colors.Error
+    Write-Host "Всего конфликтных файлов: $TotalConflicts" -ForegroundColor $Colors.Info
     Write-Host ""
 
-    foreach ($File in $ConflictFiles) {
-        if ([string]::IsNullOrWhiteSpace($File)) { continue }
+    # Флаг для выхода из внешнего цикла при выборе опции "все ваши"
+    $ApplyAllOurs = $false
 
-        Write-Host "Файл: $File" -ForegroundColor $Colors.Info
+    # Используем метку для выхода из внешнего foreach из внутреннего switch
+    :outerForeach foreach ($File in $ConflictFiles) {
+        Write-Host "========================================" -ForegroundColor $Colors.Info
+        Write-Host "Обработка файла: $File" -ForegroundColor $Colors.Info
+        Write-Host "========================================" -ForegroundColor $Colors.Info
+        Write-Host ""
+        
+        # Подсказки выводятся ПРИ КАЖДОМ запросе
+        Write-Host "Выберите действие:" -ForegroundColor $Colors.Question
+        Write-Host "  [N] - Оставить ВАШУ версию для этого файла (по умолчанию)" -ForegroundColor $Colors.Success
+        Write-Host "  [Y] - Заменить на версию из UPSTREAM для этого файла" -ForegroundColor $Colors.Warning
+        Write-Host "  [V] - Открыть файл в VS Code для ручного разрешения" -ForegroundColor $Colors.Info
+        Write-Host "  [L] - Оставить ВАШУ версию для ВСЕХ оставшихся конфликтов (автоматически)" -ForegroundColor $Colors.Success
+        Write-Host "  [A] - Прервать слияние и выйти" -ForegroundColor $Colors.Error
+        Write-Host ""
 
         do {
-            $Choice = Read-Host "Ваш выбор (N/Y/V/A) [по умолчанию: N]"
+            $Choice = Read-Host "Ваш выбор (N/Y/V/L/A) [по умолчанию: N]"
 
             if ([string]::IsNullOrWhiteSpace($Choice)) {
                 $Choice = 'N'
@@ -227,28 +262,67 @@ if ($Conflicts) {
 
             switch ($Choice) {
                 'N' {
-                    # Оставить нашу версию
+                    # Оставить нашу версию для текущего файла
                     git checkout --ours $File
                     git add $File
-                    Write-Host "  ? Оставлена ваша версия" -ForegroundColor $Colors.Success
+                    Write-Host "  ? Оставлена ваша версия: $File" -ForegroundColor $Colors.Success
                     break
                 }
                 'Y' {
-                    # Взять версию из upstream
+                    # Взять версию из upstream для текущего файла
                     git checkout --theirs $File
                     git add $File
-                    Write-Host "  ? Заменена на версию из upstream" -ForegroundColor $Colors.Warning
+                    Write-Host "  ? Заменена на версию из upstream: $File" -ForegroundColor $Colors.Warning
                     break
                 }
                 'V' {
                     # Открыть в VS Code
                     Write-Host "  Открывается VS Code для файла: $File" -ForegroundColor $Colors.Info
                     code --wait $File
-                    Write-Host "  После разрешения конфликта в VS Code, добавьте файл:" -ForegroundColor $Colors.Warning
-                    Write-Host "    git add $File" -ForegroundColor $Colors.Info
-                    Write-Host "  Затем нажмите Enter для продолжения..." -ForegroundColor $Colors.Warning
-                    Read-Host
+                    Write-Host ""
+                    Write-Host "  После разрешения конфликта в VS Code:" -ForegroundColor $Colors.Warning
+                    Write-Host "    1. Сохраните файл (Ctrl+S)" -ForegroundColor $Colors.Warning
+                    Write-Host "    2. Закройте вкладку merge-редактора" -ForegroundColor $Colors.Warning
+                    Write-Host ""
+                    Read-Host "  Нажмите Enter после выполнения этих действий"
+                    
+                    # Проверяем, был ли файл добавлен
+                    $FileStatus = git status --porcelain $File
+                    if ($FileStatus -match "^[MARC]") {
+                        Write-Host "  ? Файл добавлен в индекс" -ForegroundColor $Colors.Success
+                    } else {
+                        Write-Host "  ? Файл не добавлен в индекс. Добавляем автоматически..." -ForegroundColor $Colors.Warning
+                        git add $File
+                    }
                     break
+                }
+                'L' {
+                    # Оставить нашу версию для ВСЕХ оставшихся файлов
+                    Write-Host ""
+                    Write-Host "Применение вашей версии для всех оставшихся конфликтов..." -ForegroundColor $Colors.Info
+                    
+                    # Обрабатываем текущий файл
+                    git checkout --ours $File
+                    git add $File
+                    Write-Host "  ? Оставлена ваша версия: $File" -ForegroundColor $Colors.Success
+                    
+                    # Обрабатываем все остальные конфликтные файлы
+                    foreach ($RemainingFile in $ConflictFiles) {
+                        if ($RemainingFile -eq $File) { continue }
+                        
+                        # Проверяем, не был ли файл уже разрешён
+                        $RemainingStatus = git diff --name-only --diff-filter=U $RemainingFile
+                        if ($RemainingStatus) {
+                            git checkout --ours $RemainingFile
+                            git add $RemainingFile
+                            Write-Host "  ? Оставлена ваша версия: $RemainingFile" -ForegroundColor $Colors.Success
+                        }
+                    }
+                    
+                    $ApplyAllOurs = $true
+                    Write-Host ""
+                    Write-Host "? Все конфликты разрешены в пользу вашей версии" -ForegroundColor $Colors.Success
+                    break outerForeach
                 }
                 'A' {
                     # Прервать слияние
@@ -269,7 +343,17 @@ if ($Conflicts) {
                     exit 1
                 }
                 default {
-                    Write-Host "  Неверный выбор. Пожалуйста, введите N, Y, V или A." -ForegroundColor $Colors.Error
+                    Write-Host ""
+                    Write-Host "  ? Неверный выбор. Пожалуйста, введите N, Y, V, L или A." -ForegroundColor $Colors.Error
+                    Write-Host ""
+                    # Повторно выводим подсказки при неверном выборе
+                    Write-Host "Выберите действие:" -ForegroundColor $Colors.Question
+                    Write-Host "  [N] - Оставить ВАШУ версию для этого файла (по умолчанию)" -ForegroundColor $Colors.Success
+                    Write-Host "  [Y] - Заменить на версию из UPSTREAM для этого файла" -ForegroundColor $Colors.Warning
+                    Write-Host "  [V] - Открыть файл в VS Code для ручного разрешения" -ForegroundColor $Colors.Info
+                    Write-Host "  [L] - Оставить ВАШУ версию для ВСЕХ оставшихся конфликтов (автоматически)" -ForegroundColor $Colors.Success
+                    Write-Host "  [A] - Прервать слияние и выйти" -ForegroundColor $Colors.Error
+                    Write-Host ""
                 }
             }
         } while ($true)
@@ -278,6 +362,7 @@ if ($Conflicts) {
     }
 
     # Завершаем слияние
+    Write-Host ""
     Write-Host "Все конфликты обработаны. Завершение слияния..." -ForegroundColor $Colors.Info
 
     if ($Strategy -eq 'Merge') {
@@ -301,7 +386,9 @@ if ($Conflicts) {
     Write-Host "? $Strategy выполнен успешно без конфликтов!" -ForegroundColor $Colors.Success
 }
 
-# Отправляем изменения в origin
+# ============================================================================
+# ОТПРАВКА ИЗМЕНЕНИЙ В ORIGIN
+# ============================================================================
 Write-Host ""
 Write-Host "Отправка изменений в ваш репозиторий..." -ForegroundColor $Colors.Info
 
@@ -315,11 +402,19 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "? Изменения отправлены в origin" -ForegroundColor $Colors.Success
 } else {
     Write-Error "Не удалось отправить изменения в origin!"
+    Write-Host ""
+    Write-Host "Возможные причины:" -ForegroundColor $Colors.Warning
+    Write-Host "  1. В origin есть коммиты, которых нет локально" -ForegroundColor $Colors.Warning
+    Write-Host "  2. Решите проблему командой: git pull --rebase origin $CurrentBranch" -ForegroundColor $Colors.Warning
+    Write-Host "  3. Или (с осторожностью): git push --force-with-lease origin $CurrentBranch" -ForegroundColor $Colors.Warning
+    
     if ($StashCreated) { git stash pop }
     exit $LASTEXITCODE
 }
 
-# Восстанавливаем сохраненные изменения из stash
+# ============================================================================
+# ВОССТАНОВЛЕНИЕ СОХРАНЁННЫХ ИЗМЕНЕНИЙ ИЗ STASH
+# ============================================================================
 if ($StashCreated) {
     Write-Host ""
     Write-Host "Восстановление сохраненных изменений..." -ForegroundColor $Colors.Info
@@ -332,6 +427,9 @@ if ($StashCreated) {
     }
 }
 
+# ============================================================================
+# ФИНАЛЬНОЕ СООБЩЕНИЕ
+# ============================================================================
 Write-Host ""
 Write-Host "========================================" -ForegroundColor $Colors.Success
 Write-Host "? Синхронизация завершена успешно!" -ForegroundColor $Colors.Success
